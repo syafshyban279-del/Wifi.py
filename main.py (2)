@@ -1,0 +1,92 @@
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler
+from bot_logic import generate_wifi_profile, format_output
+
+# تفعيل السجل للتشخيص
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# استيراد الإعدادات
+from config import BOT_TOKEN
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """رسالة الترحيب عند تشغيل البوت"""
+    welcome_msg = (
+        "👋 مرحباً بك في **Wi-Fi Profile Generator**!\n\n"
+        "أنا أقوم بتأليف شبكات WiFi وهمية واحترافية لأي غرض تحتاجه.\n\n"
+        "استخدم الأوامر التالية:\n"
+        "/start - للبدء\n"
+        "/new - لإنشاء شبكة جديدة\n"
+        "/help - لعرض المساعدة\n"
+        "/export - لتصميم ملف الشبكة"
+    )
+    await update.message.reply_text(welcome_msg, parse_mode='Markdown')
+
+async def new_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إنشاء ملف شبكة جديد"""
+    # اختيار نوع عشوائي للشبكة
+    types = ["standard", "enterprise", "guest", "hidden"]
+    selected_type = random.choice(types)
+    
+    wifi_data = generate_wifi_profile(selected_type)
+    formatted_text = format_output(wifi_data)
+    
+    # إضافة أزرار التصدير
+    keyboard = [
+        [InlineKeyboardButton("نسخ النص 📋", callback_data=f'copy_{selected_type}')],
+        [InlineKeyboardButton("حفظ كملف TXT 💾", callback_data=f'txt_{selected_type}')],
+        [InlineKeyboardButton("شبكة أخرى 🔄", callback_data='refresh')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(formatted_text, parse_mode='Markdown', reply_markup=reply_markup)
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة الضغط على الأزرار"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    
+    if data.startswith('copy_'):
+        # استخراج البيانات لإعادة عرضها أو نسخها (هنا نعيد إرسال نفس البيانات كنص عادي)
+        # ملاحظة: في تطبيق حقيقي، يتم تخزين الحالة، هنا سنعيد توليدها بنفس النوع
+        type_name = data.split('_')[1]
+        wifi_data = generate_wifi_profile(type_name)
+        await query.edit_message_text(format_output(wifi_data), parse_mode='Markdown')
+        
+    elif data == 'txt_':
+        # محاكاة حفظ الملف
+        await query.edit_message_text("✅ تم إنشاء ملف `network_config.txt` بنجاح!")
+        
+    elif data == 'refresh':
+        await new_profile(update, context)
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عرض التعليمات"""
+    help_text = (
+        "🤖 *كيفية الاستخدام:*\n\n"
+        "1. اضغط /new للحصول على شبكة عشوائية.\n"
+        "2. يمكنك اختيار نوع الشبكة عبر الأزرار.\n"
+        "3. يمكنك نسخ البيانات أو تصديرها.\n\n"
+        "💡 *نصيحة:* استخدم الشبكات الوهمية لاختبار تطبيقات IoT أو لغايات العرض التقديمي."
+    )
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+def main():
+    # تطبيق البوت
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    # إضافة الأوامر
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("new", new_profile))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    
+    logger.info("Starting bot...")
+    application.run_polling()
+
+if __name__ == '__main__':
+    import random
+    main()
